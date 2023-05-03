@@ -33,17 +33,44 @@ class BiblioController extends Controller
 
     public function getPopular()
     {
-        $cache_name = 'biblio_popular';
-        if (!is_null($json = Cache::get($cache_name))) return parent::withJson($json);
+        // $cache_name = 'biblio_popular';
+        // if (!is_null($json = Cache::get($cache_name))) return parent::withJson($json);
 
         $limit = $this->sysconf['template']['classic_popular_collection_item'];
-        $sql = "SELECT b.biblio_id, b.title, b.image, COUNT(*) AS total
-          FROM loan AS l
-          LEFT JOIN item AS i ON l.item_code=i.item_code
-          LEFT JOIN biblio AS b ON i.biblio_id=b.biblio_id
-          WHERE b.title IS NOT NULL AND b.opac_hide < 1
-          GROUP BY b.biblio_id
-          ORDER BY total DESC
+        // $sql = "SELECT b.biblio_id, b.title, b.image, COUNT(*) AS total
+        //   FROM loan AS l
+        //   LEFT JOIN item AS i ON l.item_code=i.item_code
+        //   LEFT JOIN biblio AS b ON i.biblio_id=b.biblio_id
+        //   WHERE b.title IS NOT NULL AND b.opac_hide < 1
+        //   GROUP BY b.biblio_id
+        //   ORDER BY last_update desc
+        //   LIMIT {$limit}";
+
+        // $query = $this->db->query($sql);
+        // $return = array();
+        // while ($data = $query->fetch_assoc()) {
+        //     $data['image'] = $this->getImagePath($data['image']);
+        //     $return[] = $data;
+        // }
+        // if ($query->num_rows < $limit) {
+        //     $need = $limit - $query->num_rows;
+        //     if ($need < 0) {
+        //         $need = $limit;
+        //     }
+
+        //     $sql = "SELECT biblio_id, title, image FROM biblio WHERE opac_hide < 1 ORDER BY last_update desc LIMIT {$need}";
+        //     $query = $this->db->query($sql);
+        //     while ($data = $query->fetch_assoc()) {
+        //         $data['image'] = $this->getImagePath($data['image']);
+        //         $return[] = $data;
+        //     }
+        // }
+
+        // Cache::set($cache_name, json_encode($return));
+
+        $sql = "SELECT biblio_id, title, image
+          FROM biblio WHERE opac_hide < 1
+          ORDER BY last_update DESC
           LIMIT {$limit}";
 
         $query = $this->db->query($sql);
@@ -52,30 +79,16 @@ class BiblioController extends Controller
             $data['image'] = $this->getImagePath($data['image']);
             $return[] = $data;
         }
-        if ($query->num_rows < $limit) {
-            $need = $limit - $query->num_rows;
-            if ($need < 0) {
-                $need = $limit;
-            }
 
-            $sql = "SELECT biblio_id, title, image FROM biblio WHERE opac_hide < 1 ORDER BY last_update DESC LIMIT {$need}";
-            $query = $this->db->query($sql);
-            while ($data = $query->fetch_assoc()) {
-                $data['image'] = $this->getImagePath($data['image']);
-                $return[] = $data;
-            }
-        }
-
-        Cache::set($cache_name, json_encode($return));
         parent::withJson($return);
     }
 
     public function getLatest() {
-        $limit = 6;
+        $limit = $this->sysconf['template']['classic_new_collection_item'];
 
         $sql = "SELECT biblio_id, title, image
           FROM biblio WHERE opac_hide < 1
-          ORDER BY last_update DESC
+          ORDER BY biblio_id DESC
           LIMIT {$limit}";
 
         $query = $this->db->query($sql);

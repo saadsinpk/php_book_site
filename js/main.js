@@ -22,11 +22,11 @@
     var input = $('.validate-input .input100');
 
     $('.validate-form').on('submit',function(){
+        input = $(this).closest(".validate-form").find('.validate-input .input100');
         var check = true;
-
         for(var i=0; i<input.length; i++) {
-            if(validate(input[i]) == false){
-                showValidate(input[i]);
+            if(validate($(this).closest(".validate-form").find(input[i])) == false){
+                showValidate($(this).closest(".validate-form").find(input[i]));
                 check=false;
             }
         }

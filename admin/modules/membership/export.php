@@ -65,7 +65,7 @@ if (isset($_POST['doExport'])) {
         }
         // fetch all data from biblio table
         $sql = "SELECT
-            m.member_id, m.member_name, m.gender,
+            m.member_id, m.member_name, m.first_name, m.last_name, m.gender,
             mt.member_type_name, m.member_email, m.member_address,
             m.postal_code, m.inst_name, m.is_new,
             m.member_image, m.pin, m.member_phone,

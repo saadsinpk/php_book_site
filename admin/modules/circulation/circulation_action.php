@@ -53,13 +53,15 @@ function visitOnLoan($member_id)
     $query = $dbs->query('SELECT visitor_id FROM visitor_count WHERE member_id=\''.$member_id.'\' AND checkin_date LIKE \''.$now.'%\'');
     if ($query->num_rows < 1) {
         // get data
-        $mquery = $dbs->query('SELECT member_name, inst_name FROM member WHERE member_id=\''.$member_id.'\'');
+        $mquery = $dbs->query('SELECT member_name, first_name, last_name, inst_name FROM member WHERE member_id=\''.$member_id.'\'');
         $mdata = $mquery->fetch_row();
         $member_name = $dbs->escape_string($mdata[0]);
-        $institution = $mdata[1];
+        $first_name = $dbs->escape_string($mdata[1]);
+        $last_name = $dbs->escape_string($mdata[2]);
+        $institution = $mdata[3];
         // insert visit
         $checkin_date  = date('Y-m-d H:i:s');
-        $insert = $dbs->query("INSERT INTO visitor_count (member_id, member_name, institution, checkin_date) VALUES ('$member_id', '$member_name', '$institution', '$checkin_date')");
+        $insert = $dbs->query("INSERT INTO visitor_count (member_id, member_name, first_name, last_name, institution, checkin_date) VALUES ('$member_id', '$member_name', '$first_name', '$last_name', '$institution', '$checkin_date')");
         if (!$insert) {
             toastr(__('ERROR! Can\'t insert visitor counter data'))->error();
             return false;
@@ -276,7 +278,7 @@ if (isset($_GET['removeID'])) {
 // quick return proccess
 if (isset($_POST['quickReturnID']) AND $_POST['quickReturnID']) {
     // get loan data
-    $loan_info_q = $dbs->query("SELECT l.*,m.member_id,m.member_name,b.title, b.classification, mt.member_type_name FROM loan AS l
+    $loan_info_q = $dbs->query("SELECT l.*,m.member_id,m.member_name,m.first_name,m.last_name,b.title, b.classification, mt.member_type_name FROM loan AS l
         LEFT JOIN item AS i ON i.item_code=l.item_code
         LEFT JOIN biblio AS b ON i.biblio_id=b.biblio_id
         LEFT JOIN member AS m ON l.member_id=m.member_id
@@ -308,7 +310,7 @@ if (isset($_POST['quickReturnID']) AND $_POST['quickReturnID']) {
         $return_status = $circulation->returnItem($loan_d['loan_id']);
         if ($return_status === ITEM_RESERVED) {
             // get reservation data
-            $reserve_q = $dbs->query('SELECT r.member_id, m.member_name
+            $reserve_q = $dbs->query('SELECT r.member_id, m.member_name, m.first_name, m.last_name
                 FROM reserve AS r
                 LEFT JOIN member AS m ON r.member_id=m.member_id
                 WHERE item_code=\''.$loan_d['item_code'].'\' ORDER BY reserve_date ASC LIMIT 1');
@@ -324,6 +326,8 @@ if (isset($_POST['quickReturnID']) AND $_POST['quickReturnID']) {
         $return_data = array();
         $return_data['memberID'] = $loan_d['member_id'];
         $return_data['memberName'] = $loan_d['member_name'];
+        $return_data['firstName'] = $loan_d['first_name'];
+        $return_data['lastName'] = $loan_d['last_name'];
         $return_data['memberType'] = $loan_d['member_type_name'];
         $return_data['date'] = date("Y-m-d h:i:s");
         $return_data['return'][0] = array ();

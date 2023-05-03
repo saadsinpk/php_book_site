@@ -66,6 +66,26 @@ class detail
         $this->detail_id = $int_detail_id;
         $this->biblio = new Biblio($this->db, $int_detail_id);
         $this->record_detail = $this->biblio->detail();
+        $main_item_id = $_GET['id'];
+        $query_fetch = $dbs->query('
+            SELECT biblio_id, title, image
+            FROM biblio
+            ORDER BY call_number ASC
+        ');
+
+        $records = $query_fetch->fetch_all(MYSQLI_ASSOC);
+
+        // Get 5 records before biblio_id 10
+        $before = array_slice($records, 0, 5);
+        // Get 1 record for biblio_id 10
+        $middle = array_slice($records, 5, 1);
+        // Get 5 records after biblio_id 10
+        $after = array_slice($records, 6, 5);
+        // Combine all the records
+        $all_records = array_merge($before, $middle, $after);
+        $this->record_detail['all_post'] = $all_records;
+
+
         $this->error = $this->biblio->getError();
         if (isset($this->record_detail['title'])) {
           $this->record_title = $this->record_detail['title'];
@@ -266,7 +286,6 @@ HTML;
         if (trim($copy_d['site']) != "") {
           $location_name .= ' ('.$copy_d['site'].')';
         }
-		$collection .= ' '.$copy_d['coll_type_name'].'';
         $call_number = empty($call_number) ? __('No call number') : $call_number;
         $_output .= <<<HTML
             <div class="w-100 flex flex-row w-full" style="background:white">
@@ -479,7 +498,7 @@ HTML;
         $data = array();
         $this->metadata .= '<meta name="DC.subject" content="';
         foreach ($this->record_detail['subjects'] as $data) {
-            $topics .= '<a href="?class='.urlencode('"'.$data['classification'].'"').'&search=Search" title="'.__('Find other resources in this subject').'">'.$data['topic']."</a><br />";
+            $topics .= '<a href="?keywords='.urlencode('"'.$data['topic'].'"').'&search=Search" title="'.__('Find other resources in this subject').'">'.$data['topic']."</a><br />";
             $this->metadata .= $data['topic'].'; ';
         }
         $this->metadata .= '" />';

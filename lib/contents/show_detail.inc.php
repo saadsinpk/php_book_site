@@ -119,10 +119,7 @@ if (isset($_GET['inXML']) AND !empty($_GET['inXML'])) {
 
     // create detail object
     $detail = new detail($dbs, $detail_id);
-    echo "<pre>";
-    print_r($detail);
-    echo "</pre>";
-    exit();
+
     $detail->setTemplate($sysconf['template']['dir'].'/'.$sysconf['template']['theme'].'/detail_template.php');
 
     // set the content for info box

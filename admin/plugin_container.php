@@ -10,6 +10,8 @@ use \SLiMS\Plugins;
 define('INDEX_AUTH', 1);
 require_once __DIR__ . '/../sysconfig.inc.php';
 
+ini_set('display_errors', 1); ini_set('display_startup_errors', 1); error_reporting(E_ALL);
+
 if (!isset($_GET['mod']) && !isset($_GET['id'])) die('Plugin id not defined!');
 
 $module = utility::filterData('mod', 'get', false, true, true);

@@ -92,12 +92,13 @@ if (isset($_POST['removeImage']) && isset($_POST['mimg']) && isset($_POST['img']
 if (isset($_POST['saveData']) AND $can_read AND $can_write) {
     // check form validity
     $memberID = trim($_POST['memberID']);
-    $memberName = trim($_POST['memberName']);
+    $firstName = trim($_POST['firstName']);
+    $lastName = trim($_POST['lastName']);
     $birthDate = trim($_POST['birthDate']);
     $mpasswd1 = trim($_POST['memberPasswd']);
     $mpasswd2 = trim($_POST['memberPasswd2']);
-    if (empty($memberID) OR empty($memberName) OR empty($birthDate)) {
-        toastr(__('Member ID, Name and Birthday cannot be empty'))->error(); //mfc
+    if (empty($memberID) OR empty($firstName) OR empty($birthDate)) {
+        toastr(__('Member ID, First Name and Birthday cannot be empty'))->error(); //mfc
         exit();
     } else if (($mpasswd1 OR $mpasswd2) AND ($mpasswd1 !== $mpasswd2)) {
         toastr(__('Password confirmation does not match. See if your Caps Lock key is on!'))->error();
@@ -144,7 +145,8 @@ if (isset($_POST['saveData']) AND $can_read AND $can_write) {
         }
 
         $data['member_id'] = $dbs->escape_string($memberID);
-        $data['member_name'] = $dbs->escape_string($memberName);
+        $data['first_name'] = $dbs->escape_string($firstName);
+        $data['last_name'] = $dbs->escape_string($lastName);
         $data['member_type_id'] = (integer)$_POST['memberTypeID'];
         $data['inst_name'] = trim($dbs->escape_string(strip_tags($_POST['instName'])));
         $data['gender'] = trim($dbs->escape_string(strip_tags($_POST['gender'])));
@@ -173,7 +175,10 @@ if (isset($_POST['saveData']) AND $can_read AND $can_write) {
             $data['expire_date'] = simbio_date::getNextDate($mtype_data[0], $data['register_date']);
         }
         $data['pin'] = trim($dbs->escape_string(strip_tags($_POST['memberPIN'])));
-        $data['member_address'] = trim($dbs->escape_string(strip_tags($_POST['memberAddress'])));
+        $data['member_address_line'] = trim($dbs->escape_string(strip_tags($_POST['memberAddressLine'])));
+        $data['member_address_suburb'] = trim($dbs->escape_string(strip_tags($_POST['memberAddressSuburb'])));
+        $data['member_address_state'] = trim($dbs->escape_string(strip_tags($_POST['memberAddressState'])));
+        $data['member_address_postal'] = trim($dbs->escape_string(strip_tags($_POST['memberAddressPostal'])));
         $data['member_mail_address'] = trim($dbs->escape_string(strip_tags($_POST['memberMailAddress'])));
         $data['member_phone'] = trim($dbs->escape_string(strip_tags($_POST['memberPhone'])));
         $data['member_fax'] = trim($dbs->escape_string(strip_tags($_POST['memberFax'])));
@@ -264,7 +269,7 @@ if (isset($_POST['saveData']) AND $can_read AND $can_write) {
                     }
                 }
                 // write log
-                utility::writeLogs($dbs, 'staff', $_SESSION['uid'], 'membership', $_SESSION['realname'].' update member data ('.$memberName.') with ID ('.$memberID.')', 'Update', 'OK');
+                utility::writeLogs($dbs, 'staff', $_SESSION['uid'], 'membership', $_SESSION['realname'].' update member data ('.$firstName.' '.$lastName.') with ID ('.$memberID.')', 'Update', 'OK');
                 if ($sysconf['webcam'] == 'html5') {
                   echo '<script type="text/javascript">parent.$(\'#mainContent\').simbioAJAX(\''.MWB.'membership/index.php\');</script>';
                 } else {
@@ -301,7 +306,7 @@ if (isset($_POST['saveData']) AND $can_read AND $can_write) {
                     }
                 }
                 // write log
-                utility::writeLogs($dbs, 'staff', $_SESSION['uid'], 'membership', $_SESSION['realname'].' add new member ('.$memberName.') with ID ('.$memberID.')', 'Add', 'OK');
+                utility::writeLogs($dbs, 'staff', $_SESSION['uid'], 'membership', $_SESSION['realname'].' add new member ('.$firstName.' '.$lastName.') with ID ('.$memberID.')', 'Add', 'OK');
                 echo '<script type="text/javascript">parent.$(\'#mainContent\').simbioAJAX(\''.$_SERVER['PHP_SELF'].'\');</script>';
             } else { toastr(__('Member Data FAILED to Save/Update. Please Contact System Administrator')."\nDEBUG : ".$sql_op->error)->danger(); }
             exit();
@@ -315,7 +320,7 @@ if (isset($_POST['saveData']) AND $can_read AND $can_write) {
     foreach ($_POST['itemID'] as $itemID) {
         $memberID = $dbs->escape_string(trim($itemID));
         // get membership periode from database
-        $mtype_q = $dbs->query('SELECT member_periode, m.member_name FROM member AS m
+        $mtype_q = $dbs->query('SELECT member_periode, m.first_name, m.last_name FROM member AS m
             LEFT JOIN mst_member_type AS mt ON m.member_type_id=mt.member_type_id
             WHERE m.member_id=\''.$memberID.'\'');
         $mtype_d = $mtype_q->fetch_row();
@@ -344,7 +349,7 @@ if (isset($_POST['saveData']) AND $can_read AND $can_write) {
     foreach ($_POST['itemID'] as $itemID) {
         $itemID = $dbs->escape_string(trim($itemID));
         // check if the member still have loan
-        $loan_q = $dbs->query('SELECT DISTINCT m.member_id, m.member_name, COUNT(l.loan_id) FROM member AS m
+        $loan_q = $dbs->query('SELECT DISTINCT m.member_id, m.first_name, m.last_name, COUNT(l.loan_id) FROM member AS m
             LEFT JOIN loan AS l ON (m.member_id=l.member_id AND l.is_lent=1 AND l.is_return=0)
             WHERE m.member_id=\''.$itemID.'\' GROUP BY m.member_id');
         $loan_d = $loan_q->fetch_row();
@@ -436,7 +441,7 @@ if (isset($_POST['detail']) OR (isset($_GET['action']) AND $_GET['action'] == 'd
         // record ID for delete process
         $form->record_id = $itemID;
         // form record title
-        $form->record_title = $rec_d['member_name'];
+        $form->record_title = $rec_d['first_name'].' '.$rec_d['last_name'];
         // submit button attribute
         $form->submit_button_attr = 'name="saveData" value="'.__('Update').'" class="s-btn btn btn-primary"';
 
@@ -476,7 +481,8 @@ if (isset($_POST['detail']) OR (isset($_GET['action']) AND $_GET['action'] == 'd
     $str_input .= '</div>';
     $form->addAnything(__('Member ID').'*', $str_input);
     // member name
-    $form->addTextField('text', 'memberName', __('Member Name').'*', $rec_d['member_name']??'', 'class="form-control" style="width: 50%;"');
+    $form->addTextField('text', 'firstName', __('First Name').'*', $rec_d['first_name']??'', 'class="form-control" style="width: 50%;"');
+    $form->addTextField('text', 'lastName', __('Last Name'), $rec_d['last_name']??'', 'class="form-control" style="width: 50%;"');
     // member birth date
     $form->addDateField('birthDate', __('Birth Date').'*', $rec_d['birth_date']??'','class="form-control"');
     // member since date
@@ -507,7 +513,11 @@ if (isset($_POST['detail']) OR (isset($_GET['action']) AND $_GET['action'] == 'd
     $gender_chbox[1] = array('0', __('Female'));
     $form->addRadio('gender', __('Sex'), $gender_chbox, !empty($rec_d['gender'])?$rec_d['gender']:'0');
     // member address
-    $form->addTextField('textarea', 'memberAddress', __('Address'), $rec_d['member_address']??'', 'rows="2" class="form-control" style="width: 100%;"');
+    $form->addTextField('text', 'memberAddressLine', __('Address Line'), $rec_d['member_address_line']??'', 'rows="2" class="form-control" style="width: 100%;"');
+    $form->addTextField('text', 'memberAddressSuburb', __('Suburb'), $rec_d['member_address_suburb']??'', 'rows="2" class="form-control" style="width: 100%;"');
+    $form->addTextField('text', 'memberAddressState', __('State'), $rec_d['member_address_state']??'', 'rows="2" class="form-control" style="width: 100%;"');
+    $form->addTextField('text', 'memberAddressPostal', __('Postal'), $rec_d['member_address_postal']??'', 'rows="2" class="form-control" style="width: 100%;"');
+
     // member postal
     $form->addTextField('text', 'memberPostal', __('Postal Code'), $rec_d['postal_code']??'', 'class="form-control" style="width: 50%;"');
     // member mail address
@@ -641,11 +651,11 @@ if (isset($_POST['detail']) OR (isset($_GET['action']) AND $_GET['action'] == 'd
     if ($form->edit_mode) {
         if (isset($rec_d['member_image'])) {
             if (file_exists(IMGBS.'persons/'.$rec_d['member_image'])) {
-                echo '<div id="memberImage"><img src="'.SWB.'images/persons/'.urlencode($rec_d['member_image']).'?'.date('his').'" alt="'.$rec_d['member_name'].'" /></div>';
+                echo '<div id="memberImage"><img src="'.SWB.'images/persons/'.urlencode($rec_d['member_image']).'?'.date('his').'" alt="'.$rec_d['first_name'].' '.$rec_d['last_name'].'" /></div>';
             }
         }
         echo '<div class="infoBox">
-                <div>'.__('You are going to edit member data').' : <strong>'.$rec_d['member_name'].'</strong></div>
+                <div>'.__('You are going to edit member data').' : <strong>'.$rec_d['first_name'].' '.$rec_d['last_name'].'</strong></div>
                 <div>'.__('Last Updated').' '.date('d F Y h:i:s',strtotime($rec_d['last_update'])).' '.$expired_message.'</div>
                 <div>'.__('Leave Password field blank if you don\'t want to change the password').'</div>';
         echo '</div>'."\n";
@@ -675,7 +685,7 @@ $(document).ready(function() {
     function showMemberImage($obj_db, $array_data){
       global $sysconf;
       $image = '../images/persons/photo.png';
-      $_q = $obj_db->query('SELECT member_image,member_name,member_address,member_phone FROM member WHERE member_id = "'.$array_data[0].'"');
+      $_q = $obj_db->query('SELECT member_image,first_name,last_name,member_address_line,member_address_suburb,member_address_state,member_address_postal,member_phone FROM member WHERE member_id = "'.$array_data[0].'"');
       if(isset($_q->num_rows)){
         $_d = $_q->fetch_row();
         if($_d[0] != NULL){      
@@ -706,14 +716,16 @@ $(document).ready(function() {
     if ($can_read AND $can_write) {
         $datagrid->setSQLColumn('m.member_id',
             'm.member_id AS \''.__('Member ID').'\'',
-            'm.member_name AS \''.__('Member Name').'\'',
+            'm.first_name AS \''.__('First Name').'\'',
+            'm.last_name AS \''.__('Last Name').'\'',
             'mt.member_type_name AS \''.__('Membership Type').'\'',
             'm.member_email AS \''.__('E-mail').'\'',
             'm.last_update AS \''.__('Last Updated').'\'');
             $datagrid->modifyColumnContent(2, 'callback{showMemberImage}');
     } else {
         $datagrid->setSQLColumn('m.member_id AS \''.__('Member ID').'\'',
-            'm.member_name AS \''.__('Member Name').'\'',
+            'm.first_name AS \''.__('First Name').'\'',
+            'm.last_name AS \''.__('Last Name').'\'',
             'mt.member_type_name AS \''.__('Membership Type').'\'',
             'm.member_email AS \''.__('E-mail').'\'',
             'm.last_update AS \''.__('Last Updated').'\'');
@@ -725,7 +737,7 @@ $(document).ready(function() {
     $criteria = 'm.member_id IS NOT NULL ';
     if (isset($_GET['keywords']) AND $_GET['keywords']) {
        $keywords = $dbs->escape_string($_GET['keywords']);
-       $criteria .= " AND (m.member_name LIKE '%$keywords%' OR m.member_id LIKE '%$keywords%') ";
+       $criteria .= " AND (m.first_name LIKE '%$keywords%' OR m.last_name LIKE '%$keywords%' OR m.member_id LIKE '%$keywords%') ";
     }
     if (isset($_GET['expire'])) {
         $criteria .= " AND TO_DAYS('".date('Y-m-d')."')>TO_DAYS(m.expire_date)";

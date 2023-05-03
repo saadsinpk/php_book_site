@@ -65,7 +65,7 @@ class Visitor
         //DB::debug();
 
         try {
-            $query = "SELECT member_id,member_name,member_image,inst_name, IF(TO_DAYS('".date('Y-m-d')."')>TO_DAYS(expire_date), 1, 0) AS is_expire FROM member WHERE member_id = ?";
+            $query = "SELECT member_id,member_name,first_name,last_name,member_image,inst_name, IF(TO_DAYS('".date('Y-m-d')."')>TO_DAYS(expire_date), 1, 0) AS is_expire FROM member WHERE member_id = ?";
             $statement = $db->prepare($query);
             $statement->execute([$memberId]);
 
@@ -105,7 +105,7 @@ class Visitor
             }
 
         
-            $insertQuery = "INSERT INTO visitor_count (member_id, member_name, institution, checkin_date) VALUES (?,?,?,?)";
+            $insertQuery = "INSERT INTO visitor_count (member_id, first_name, institution, checkin_date) VALUES (?,?,?,?)";
             $insertStatement = $db->prepare($insertQuery);
 
             if ($this->opac->enable_visitor_limitation && $this->alreadyCheckIn($memberId, $this->member))
@@ -137,7 +137,7 @@ class Visitor
     protected function alreadyCheckIn($memberIdOrName, $isMember = true)
     {
         $db = DB::getInstance();
-        $criteria = 'member_name';
+        $criteria = 'first_name';
         if ($isMember) $criteria = 'member_id';
     
         $statement = $db->prepare('SELECT checkin_date FROM visitor_count WHERE '.$criteria.'=? ORDER BY checkin_date DESC LIMIT 1');

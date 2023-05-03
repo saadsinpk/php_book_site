@@ -109,8 +109,9 @@ class member_logon
         if ($_entries) {
             $this->user_info['member_id'] = $_entries[0][$ldap_configs['userid_field']][0];
             // check member in database
-            $_check_q = $this->obj_db->query('SELECT m.member_id, m.member_name, m.inst_name,
+            $_check_q = $this->obj_db->query('SELECT m.member_id, CONCAT(m.first_name, \' \', m.last_name) AS member_name, m.first_name, m.last_name m.inst_name,
                 m.member_email, m.expire_date, m.register_date, m.is_pending, m.birth_date, m.member_phone,
+                m.member_address_line, m.member_address_postal, m.member_address_suburb, m.member_address_state, 
                 m.member_type_id, mt.member_type_name, mt.enable_reserve, mt.reserve_limit
                 FROM member AS m LEFT JOIN mst_member_type AS mt ON m.member_type_id=mt.member_type_id
                 WHERE m.member_id=\''.$this->user_info['member_id'].'\'');
@@ -167,8 +168,9 @@ class member_logon
             WHERE m.member_id='%s'
                 AND m.mpasswd=MD5('%s')", $this->obj_db->escape_string($this->username), $this->obj_db->escape_string($this->password));
         */
-        $_sql_member_login = sprintf("SELECT m.member_id, m.member_name, m.mpasswd, m.inst_name,
+        $_sql_member_login = sprintf("SELECT m.member_id, m.member_name, m.first_name, m.last_name, m.mpasswd, m.inst_name,
             m.member_email, m.expire_date, m.register_date, m.is_pending, m.birth_date, m.member_phone,
+            m.member_address_line, m.member_address_postal, m.member_address_suburb, m.member_address_state, 
             m.member_type_id, mt.member_type_name, mt.enable_reserve, mt.reserve_limit, m.member_image
             FROM member AS m LEFT JOIN mst_member_type AS mt ON m.member_type_id=mt.member_type_id
             WHERE m.member_id='%s'", $this->obj_db->escape_string($this->username));
@@ -229,7 +231,7 @@ class member_logon
 
         // fill all sessions var
         $_SESSION['mid'] = $this->user_info['member_id'];
-        $_SESSION['m_name'] = $this->user_info['member_name'];
+        $_SESSION['m_name'] = $this->user_info['first_name'].' '.$this->user_info['last_name'];
         $_SESSION['m_email'] = $this->user_info['member_email'];
         $_SESSION['m_institution'] = $this->user_info['inst_name'];
         $_SESSION['m_logintime'] = time();
@@ -238,7 +240,21 @@ class member_logon
         $_SESSION['m_member_type'] = $this->user_info['member_type_name'];
         $_SESSION['m_register_date'] = $this->user_info['register_date'];
 		$_SESSION['m_birth_date'] = $this->user_info['birth_date'];
-		$_SESSION['m_member_phone'] = $this->user_info['member_phone'];
+        $_SESSION['m_member_phone'] = $this->user_info['member_phone'];
+        $address_session = '';
+        if(!empty($this->user_info['member_address_line'])) {
+            $address_session .= $this->user_info['member_address_line'].', ';
+        }
+        if(!empty($this->user_info['member_address_postal'])) {
+            $address_session .= $this->user_info['member_address_postal'].', ';
+        }
+        if(!empty($this->user_info['member_address_suburb'])) {
+            $address_session .= $this->user_info['member_address_suburb'].', ';
+        }
+        if(!empty($this->user_info['member_address_state'])) {
+            $address_session .= $this->user_info['member_address_state'];
+        }
+        $_SESSION['m_address'] = $address_session;
         $_SESSION['m_membership_pending'] = intval($this->user_info['is_pending'])?true:false;
         $_SESSION['m_is_expired'] = false;
         $_SESSION['m_mark_biblio'] = array();

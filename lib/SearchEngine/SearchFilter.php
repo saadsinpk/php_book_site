@@ -16,7 +16,6 @@ trait SearchFilter
     public function getFilter($opac, $build = false)
     {
         $filter = [];
-
         # Publish Year
         list($min, $max) = $this->getYears();
         $filter[] = [
@@ -28,7 +27,6 @@ trait SearchFilter
             'from' => $min,
             'to' => $max
         ];
-
         # Availability
         $filter[] = [
             'header' => __('Availability'),
@@ -37,7 +35,8 @@ trait SearchFilter
             'items' => [
                 [
                     'value' => '1',
-                    'label' => __('On Shelf')
+                    'label' => __('On Shelf'),
+                    'count' => $this->getAvailabilityCount()[0]['total_count']
                 ]
             ]
         ];
@@ -63,6 +62,10 @@ trait SearchFilter
             ]
         ];*/
 
+        // echo "<pre>";
+        // print_r($this->getCollectionType());
+        // echo "</pre>";
+        // exit();
         # Collection type
         $filter[] = [
             'header' => __('Collection'),
@@ -105,9 +108,15 @@ trait SearchFilter
         return $query->fetch(\PDO::FETCH_NUM);
     }
 
+    public function getAvailabilityCount()
+    {
+        $query = DB::getInstance()->query("SELECT COUNT(biblio_id) as total_count FROM `item`");
+        return $query->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
     public function getCollectionType()
     {
-        $query = DB::getInstance()->query("select coll_type_id `value`, coll_type_name `label` from mst_coll_type");
+        $query = DB::getInstance()->query("SELECT mst_coll_type.coll_type_id AS value, mst_coll_type.coll_type_name AS label, COUNT(DISTINCT item.biblio_id) AS count FROM mst_coll_type LEFT JOIN item ON item.coll_type_id = mst_coll_type.coll_type_id GROUP BY mst_coll_type.coll_type_id");
         return $query->fetchAll(\PDO::FETCH_ASSOC);
     }
 
@@ -125,7 +134,6 @@ trait SearchFilter
 
     public function getLanguage()
     {
-
         $query = DB::getInstance()->query("SELECT mst_language.language_id AS value, mst_language.language_name AS label, COUNT(biblio.language_id) AS count FROM mst_language LEFT JOIN biblio ON biblio.language_id = mst_language.language_id GROUP BY mst_language.language_id");
         return $query->fetchAll(\PDO::FETCH_ASSOC);
     }
@@ -196,12 +204,14 @@ HTML;
 
                         $checked = $value == $item['value'] ? 'checked' : '';
                         $clear = ($filter['clear'] ?? false) ? 'clear="'.$filter_name.'"' : '';
-
+                        if(!isset($item['count'])) {
+                            $item['count'] ='';
+                        }
                         $str .= <<<HTML
                             <div class="form-check">
                                 <input class="form-check-input" name="{$filter_name}" type="{$filter['type']}" 
                                     id="item-{$item_index}" value="{$item['value']}" {$checked} {$clear}>
-                                <label class="form-check-label" for="item-{$item_index}">{$item['label']}</label>
+                                <label class="form-check-label" for="item-{$item_index}">{$item['label']} ({$item['count']})</label>
                             </div>
 HTML;
                     }

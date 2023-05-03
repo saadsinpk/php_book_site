@@ -50,7 +50,7 @@ function showComment($_detail_id)
 		} else {
 			$page  = 1;
 		}
-		$_sql = "Select c.comment, m.member_name, c.input_date from comment AS c
+		$_sql = "Select c.comment, m.member_name, m.first_name, m.last_name, c.input_date from comment AS c
 		 LEFT JOIN biblio AS b ON b.biblio_id = c.biblio_id
 		 LEFT JOIN member AS m ON m.member_id = c.member_id
 		 WHERE b.biblio_id =".$_detail_id.
@@ -66,7 +66,7 @@ function showComment($_detail_id)
 			$_list_comment .= '<div class="comment-found">'. $_all_recs . __(' comments available'). '</div>'; 
 			while ($_data = $commlist->fetch_assoc()) {
 				$_list_comment .= '<div class="comments">';
-				$_list_comment .= '<div class="comment-member">'.$_data['member_name']. __(' at ') . $_data['input_date']. __(' write'). '</div>';
+				$_list_comment .= '<div class="comment-member">'.$_data['first_name'].' '.$_data['last_name']. __(' at ') . $_data['input_date']. __(' write'). '</div>';
 				$_list_comment .= '<div class="comment-content mt-2">'. $_data['comment'] . '</div>';
 				$_list_comment .= '</div>';		
 			}

@@ -44,6 +44,13 @@ $url = $_SERVER['SCRIPT_NAME'].'?'.$_SERVER['QUERY_STRING'];
 $query = sprintf("SELECT user_id,realname FROM user WHERE email='%s' AND forgot='%s'", $email, $salt);
 $_q = $dbs->query($query);
 $file_d = $_q->fetch_assoc();
+$member_account = false;
+if(!isset($file_d)) {
+  $query = sprintf("SELECT member_id AS user_id,member_name AS realname FROM member WHERE member_email='%s' AND forgot='%s'", $email, $salt);
+  $_q = $dbs->query($query);
+  $file_d = $_q->fetch_assoc();
+  $member_account = true;
+}
 $_uname = $file_d['realname'];
 
 
@@ -58,14 +65,26 @@ if (isset($_POST['updatePassword'])) {
   } else {
     // Confirm about email and salt again
     if ($_q->num_rows > 0) {
-      $_sql_update_password = sprintf("UPDATE user SET passwd = '%s', last_update = CURDATE(), forgot='' WHERE email = '%s' AND forgot= '%s'", password_hash($passwd2, PASSWORD_BCRYPT), $email, $salt);
-      $_update_q = $dbs->query($_sql_update_password);
-      // error check
-      if ($dbs->error) {
-        echo __('Failed to query user data from database with error: '.$dbs->error);
+      if($member_account) {
+        $_sql_update_password = sprintf("UPDATE member SET mpasswd = '%s', last_update = CURDATE(), forgot='' WHERE member_email = '%s' AND forgot= '%s'", password_hash($passwd2, PASSWORD_BCRYPT), $email, $salt);
+        $_update_q = $dbs->query($_sql_update_password);
+        // error check
+        if ($dbs->error) {
+          echo __('Failed to query user data from database with error: '.$dbs->error);
+        }
+        utility::writeLogs($dbs, 'member', $_uname, 'Login', 'Change password SUCCESS for user '.$_uname.' from address '.$_SERVER['REMOTE_ADDR'], 'Password', 'Update');
+        $redirect_URL = 'index.php?p=member';
+      } else {
+        $_sql_update_password = sprintf("UPDATE user SET passwd = '%s', last_update = CURDATE(), forgot='' WHERE email = '%s' AND forgot= '%s'", password_hash($passwd2, PASSWORD_BCRYPT), $email, $salt);
+        $_update_q = $dbs->query($_sql_update_password);
+        // error check
+        if ($dbs->error) {
+          echo __('Failed to query user data from database with error: '.$dbs->error);
+        }
+        utility::writeLogs($dbs, 'staff', $_uname, 'Login', 'Change password SUCCESS for user '.$_uname.' from address '.$_SERVER['REMOTE_ADDR'], 'Password', 'Update');
+        $redirect_URL = 'index.php?p=admin';
       }
       // write log
-      utility::writeLogs($dbs, 'staff', $_uname, 'Login', 'Change password SUCCESS for user '.$_uname.' from address '.$_SERVER['REMOTE_ADDR'], 'Password', 'Update');
 
       // clear cookie
       #setcookie('token', '', time()-3600, SWB);
@@ -97,7 +116,7 @@ if (isset($_POST['updatePassword'])) {
 
       echo '<script type="text/javascript">';
       echo 'alert("'.__("Password has been updated successfully.").'");';
-      echo 'location.href = "index.php?p=admin";';
+      echo 'location.href = "'.$redirect_URL.'";';
       echo '</script>';
     } else {
       echo '<script type="text/javascript">';

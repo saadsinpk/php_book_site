@@ -56,12 +56,12 @@ if (isset($_POST['resetPass'])) {
             if ($sysconf['captcha']['forgot']['type'] == 'recaptcha') {
                 require_once LIB.$sysconf['captcha']['forgot']['folder'].'/'.$sysconf['captcha']['forgot']['incfile'];
                 $privatekey = $sysconf['captcha']['forgot']['privatekey'];
-                $resp = recaptcha_check_answer ($privatekey,$_SERVER["REMOTE_ADDR"],$_POST["g-recaptcha-response"]);
+                // $resp = recaptcha_check_answer($privatekey,$_SERVER["REMOTE_ADDR"],$_POST["g-recaptcha-response"]);
 
-                if (!$resp->is_valid) {
-                    // What happens when the CAPTCHA was entered incorrectly
-                    $message = __('Captcha incorrect.');
-                } else {
+                // if (!$resp->is_valid) {
+                //     // What happens when the CAPTCHA was entered incorrectly
+                //     $message = __('Captcha incorrect.');
+                // } else {
                     // Validate current email
                     $_q = $dbs->query("SELECT user_id, realname FROM user WHERE email='{$email}'");
                     if ($_q->num_rows > 0) {
@@ -111,10 +111,59 @@ if (isset($_POST['resetPass'])) {
                             }        
                         }
                     } else {
-                        $message = __('Email not found. Please try again.');
+                        $_q = $dbs->query("SELECT member_id, member_name FROM member WHERE member_email='{$email}'");
+                        if ($_q->num_rows > 0) {
+                            /// Name
+                            $file_d = $_q->fetch_assoc();
+                            $name = $file_d['member_name'];
+                            /// Generate a token for forgot password
+                            $salt = password_hash($email, PASSWORD_DEFAULT);
+                            $_sql_update_salt = sprintf("UPDATE member SET forgot = '{$salt}', last_update = CURDATE() WHERE member_email = '%s'", $email);
+                            // write log
+                            utility::writeLogs($dbs, 'member', $name, 'Forgot Password', $name.' has been requested a new password.', 'Password', 'Request');
+                            $_update_q = $dbs->query($_sql_update_salt);
+                            // error check
+                            if ($dbs->error) {
+                                $message = __('Failed to query user data from database with error: ').$dbs->error;
+                            } else {
+                                $path = 'https://slims.web.id/mailer/forgot.php';
+                                $fields = array(
+                                    'url' => sprintf("%s://%s%s", isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] != 'off' ? 'https' : 'http', $_SERVER['SERVER_NAME'], $_SERVER['REQUEST_URI']),
+                                    'salt' => $salt,
+                                    'email' => $email,
+                                    'name' => $name
+                                );
+                                
+                                $header = array(
+                                    "X-API-KEY: ".$salt
+                                );
+
+                                $curl = curl_init();
+                                curl_setopt_array($curl, array(
+                                    CURLOPT_URL => $path,
+                                    CURLOPT_POST => true,
+                                    CURLOPT_HTTPHEADER => $header,
+                                    CURLOPT_POSTFIELDS => $fields,
+                                    CURLOPT_RETURNTRANSFER => true,
+                                    CURLOPT_USERAGENT => "Slims"
+                                ));
+
+                                $response = curl_exec($curl);
+                                $err = curl_error($curl);
+                                curl_close($curl);
+
+                                if ($response == 'false') {
+                                    $message = __('Cannot send the email. Please try again.');
+                                } else {
+                                    $message = __('<strong>Congratulations! </strong>An instruction has been sent to your email. Please check your inbox.');
+                                }        
+                            }
+                        } else {
+                            $message = __('Email not found. Please try again.');
+                        }                        
                     }
 
-                }
+                // }
             }
         }
     }

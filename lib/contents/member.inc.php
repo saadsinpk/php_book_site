@@ -62,15 +62,14 @@ define('CANT_UPDATE_PASSWD', -3);
 
 // if member is logged out
 if (isset($_GET['logout']) && $_GET['logout'] == '1') {
+    ini_set('display_errors', 1); ini_set('display_startup_errors', 1); error_reporting(E_ALL);
     // write log
     utility::writeLogs($dbs, 'member', $_SESSION['email'], 'Login', $_SESSION['member_name'] . ' Log Out from address ' . ip());
     // completely destroy session cookie
     simbio_security::destroySessionCookie(null, MEMBER_COOKIES_NAME, SWB, false);
-    redirect()->withHeader([
-        ['Cache-Control', 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0'],
-        ['Expires', 'Sat, 26 Jul 1997 05:00:00 GMT'],
-        ['Pragma', 'no-cache']
-    ])->to('index.php');
+    redirect()->to('index.php');
+
+    exit();
 }
 
 // if there is member login action
@@ -117,10 +116,14 @@ if (isset($_POST['logMeIn']) && !$is_member_login) {
         if ($logon->valid($dbs)) {
             // write log
             utility::writeLogs($dbs, 'member', $username, 'Login', sprintf(__('Login success for member %s from address %s'),$username,ip()));
-            if (isset($_GET['destination']) && Url::isValid($_GET['destination']) && Url::isSelf($_GET['destination'])) {
-                redirect($_GET['destination']);
+            if(isset($_POST['web_redirect'])) {
+                redirect($_POST['web_redirect']);
             } else {
-                redirect()->toPath('member');
+                if (isset($_GET['destination']) && Url::isValid($_GET['destination']) && Url::isSelf($_GET['destination'])) {
+                    redirect($_GET['destination']);
+                } else {
+                    redirect()->toPath('member');
+                }
             }
             exit();
         } else {
@@ -133,6 +136,105 @@ if (isset($_POST['logMeIn']) && !$is_member_login) {
         }
     }
 }
+    function saveReserve_new($dbs, $sysconf)
+    {
+
+        if (count($_SESSION['m_mark_biblio']) > 0) {
+            
+            // cek dahulu, batas reservasi apakah sudah tercapai?
+            if (($check = _isReserveAlowed_new($dbs)) !== true) return $check;
+
+            $result = [];
+            $sql_op = new simbio_dbop($dbs);
+            $reserve['member_id'] = $_SESSION['mid'];
+
+            foreach ($_SESSION['m_mark_biblio'] as $_index => $_biblio) {
+                $id = (integer)$_biblio;
+                $biblio = api::biblio_load($dbs, $id);
+
+                // skip if already reseve this collection
+                if(_isAlreadyReserved_new($dbs, $id)) {
+                    $result[] = ['status' => 'SUCCESS', 'message' => sprintf(__('%s already reseved'), $biblio['title'])];
+                    unset($_SESSION['m_mark_biblio'][$_index]);
+                    continue;
+                }
+
+                // cek ketersediaan item,
+                if(count($biblio['items'] ?? []) > 0) {
+                    
+                    if($sysconf['reserve_on_loan_only']) {
+                        // ambil secara random dari koleksi yang dipinjam
+                        $item_code = _getItemReserveFromLoan_new($dbs);
+                    } else {
+                        // Semua item bisa direservasi
+                        $item_code = _getItemReserve_new($dbs, $id);
+                    }
+
+                    if(is_null($item_code)) {
+                        $result[] = ['status' => 'ERROR', 'message' => sprintf(__('%s is available for loan.'), $biblio['title'])];
+                    } else {
+                        $reserve['biblio_id'] = $id;
+                        $reserve['item_code'] = $item_code;
+                        $reserve['reserve_date'] = date('Y-m-d H:i:s');
+                        if($sql_op->insert('reserve', $reserve)) {
+                            $result[] = ['status' => 'SUCCESS', 'message' => sprintf(__('%s reserved successfully.'), $biblio['title'])];
+                            unset($_SESSION['m_mark_biblio'][$_index]);
+                        } else {
+                            $debug_message = ENVIRONMENT == 'development' ? $sql_op->error : '';
+                            $result[] = ['status' => 'ERROR', 'message' => sprintf(__('%s failed to be reserve. '), $biblio['title']) . $debug_message ];
+                        }
+                    }
+
+                } else {
+                    // jika tidak memiliki item, maka tidak dapat direservasi.
+                    $result[] = ['status' => 'ERROR', 'message' => sprintf(__('No item available to be reserved for %s'), $biblio['title'])];
+                }
+                
+            }
+
+            return $result;
+        } else {
+            return array('status' => 'ERROR', 'message' => __('No Titles to reserve'));
+        }
+    }
+    function _getItemReserveFromLoan_new($dbs)
+    {
+        $sql = "SELECT item_code, due_date FROM loan WHERE is_lent=1 AND is_return=0 ORDER BY RAND() ASC LIMIT 1";
+        $query = $dbs->query($sql);
+        $data = $query->fetch_row();
+        return $data[0] ?? null;
+    }
+
+    function _isAlreadyReserved_new($dbs, $biblio_id)
+    {
+        $sql = "SELECT member_id FROM reserve WHERE biblio_id='%s' AND member_id='%s'";
+        $query = $dbs->query(sprintf($sql, $biblio_id, $_SESSION['mid']));
+        return $query->num_rows > 0;
+    }
+
+    function _getItemReserve_new($dbs, $biblio_id)
+    {
+        $sql = "SELECT item_code FROM item WHERE biblio_id='%s' ORDER BY RAND() ASC LIMIT 1";
+        $query = $dbs->query(sprintf($sql, $biblio_id));
+        $data = $query->fetch_row();
+        return $data[0] ?? null;
+    }
+
+    function _isReserveAlowed_new($dbs) {
+
+        // cek apakah di keanggotaan diijikan untuk reservasi
+        if ($_SESSION['m_can_reserve'] == '0') return ['status' => 'ERROR', 'message' => __('Reservation not allowed')];;
+
+        // hitung yang sedang direservasi
+        $sql = "SELECT COUNT(reserve_id) FROM reserve WHERE member_id='%s'";
+        $query = $dbs->query(sprintf($sql, $_SESSION['mid']));
+        $data = $query->fetch_row();
+        
+        // hitung tinggal berapa kesempatan untuk reservasinya
+        return ($data[0]+count($_SESSION['m_mark_biblio'])) > (int)$_SESSION['m_reserve_limit'] ? ['status' => 'ERROR', 'message' => __('Reserve limit reached')] : 
+            (count($_SESSION['m_mark_biblio']) > (int)$_SESSION['m_reserve_limit'] ? ['status' => 'ERROR', 'message' => sprintf(__('Maximum reserve limit is %d collection'), (int)$_SESSION['m_reserve_limit'])] : true);
+    }
+
 
 // biblio basket add process
 if ($is_member_login) {
@@ -148,22 +250,47 @@ if ($is_member_login) {
             $message = 'Maximum ' . $sysconf['max_biblio_mark'] . ' titles can be added to list!';
             $info = '<span style="font-size: 120%; font-weight: bold; color: red;">' . $message . '</span>';
         } else {
-            foreach ($_POST['biblio'] as $biblio) {
-                $biblio = (integer)$biblio;
-                $_SESSION['m_mark_biblio'][$biblio] = $biblio;
-            }
             $status = true;
             $message = __('Title has been added to the list.');
         }
 
         if (isset($_POST['callback']) && $_POST['callback'] === 'json') {
-            $res = [
-                'status' => $status,
-                'message' => $message,
-                'count' => count($_SESSION['m_mark_biblio'])
-            ];
-            exit(Json::stringify($res)->withHeader());
+            // exit(Json::stringify($res)->withHeader());
+            if ($sysconf['reserve_direct_database'] ?? false) {
+                // $res = [
+                //     'status' => $status,
+                //     'message' => $message,
+                //     'count' => count($_SESSION['m_mark_biblio'])
+                // ];
+
+                foreach ($_POST['biblio'] as $biblio) {
+                    $biblio = (integer)$biblio;
+                    $_SESSION['m_mark_biblio'][$biblio] = $biblio;
+                }
+
+                header('content-type: application/json');
+                $output_resp = saveReserve_new($dbs, $sysconf);
+
+                if(isset($output_resp['status'])) {
+                    if($output_resp['status'] == 'ERROR') {
+                        foreach ($_POST['biblio'] as $biblio) {
+                            $biblio = (integer)$biblio;
+                            unset($_SESSION['m_mark_biblio'][$biblio]);
+                        }
+                        echo json_encode($output_resp);
+                        exit();
+                    }
+                }
+                $res = [
+                    'status' => $status,
+                    'message' => $message,
+                    'count' => count($_SESSION['m_mark_biblio'])
+                ];
+        
+                exit(Json::stringify($res)->withHeader());
+            }
         }
+
     }
     if (isset($_POST['bookmark_id']))
     {
@@ -273,11 +400,11 @@ if ($is_member_login) :
         $_detail .= '</tr>' . "\n";
         $_detail .= '<tr>' . "\n";
         $_detail .= '<td class="key alterCell" width="15%"><strong>' . __('Email') . '</strong></td><td class="value alterCell2" width="30%">' . $_SESSION['m_email'] . '</td>';
-        $_detail .= '<td class="key alterCell" width="15%"><strong>' . __('Date of Birth') . '</strong></td><td class="value alterCell2" width="30%">' . $_SESSION['m_birth_date'] . '</td>';
+        $_detail .= '<td class="key alterCell" width="15%"><strong>' . __('Date of Birth') . '</strong></td><td class="value alterCell2" width="30%">' . date("d-m-Y", strtotime($_SESSION['m_birth_date'])) . '</td>';
         $_detail .= '</tr>' . "\n";
         $_detail .= '<tr>' . "\n";
-        $_detail .= '<td class="key alterCell" width="15%"><strong>' . __('Date Joined') . '</strong></td><td class="value alterCell2" width="30%">' . $_SESSION['m_register_date'] . '</td>';
-        $_detail .= '<td class="key alterCell" width="15%"><strong>' . __('Expiry Date') . '</strong></td><td class="value alterCell2" width="30%">' . $_SESSION['m_expire_date'] . '</td>';
+        $_detail .= '<td class="key alterCell" width="15%"><strong>' . __('Date Joined') . '</strong></td><td class="value alterCell2" width="30%">' . date("d-m-Y", strtotime($_SESSION['m_register_date'])) . '</td>';
+        $_detail .= '<td class="key alterCell" width="15%"><strong>' . __('Expiry Date') . '</strong></td><td class="value alterCell2" width="30%">' . date("d-m-Y", strtotime($_SESSION['m_expire_date'])) . '</td>';
         $_detail .= '</tr>' . "\n";
         $_detail .= '<tr>' . "\n";
 		$_detail .= '<td class="key alterCell" width="15%"><strong>' . __('Address') . '</strong></td><td class="value alterCell2" width="30%">' . $_SESSION['m_address'] . '</td>';
@@ -296,8 +423,59 @@ if ($is_member_login) :
        */
     function changePassword()
     {
-        // show the member information
+        global $dbs;
+        // get hash from db
+        $_query = sprintf('SELECT * FROM member
+            WHERE member_id=\'%s\'', $dbs->escape_string(trim($_SESSION['mid'])));
+        $_query = $dbs->query($_query);
+        $fetch_query = $_query->fetch_row();
+
         $_form = '<form id="memberChangePassword" method="post" action="index.php?p=member&sec=my_account">' . "\n";
+
+
+        $_form .= '<table class="memberDetail table table-striped" cellpadding="5" cellspacing="0">' . "\n";
+
+        $_form .= '<tr>' . "\n";
+        $_form .= '<td class="key alterCell" width="20%"><strong>' . __('Phone Number') . '</strong></td>';
+        $_form .= '<td class="value alterCell2"><input type="text" name="phone_number" class="form-control" value="'.$fetch_query[19].'" /></td>';
+        $_form .= '</tr>' . "\n";
+        $_form .= '<tr>' . "\n";
+        $_form .= '<td class="key alterCell" width="20%"><strong>' . __('Email') . '</strong></td>';
+        $_form .= '<td class="value alterCell2"><input type="email" name="email" class="form-control" value="'.$fetch_query[13].'" /></td>';
+        $_form .= '</tr>' . "\n";
+        $_form .= '</table>' . "\n";
+
+
+
+
+        $_form .= '<div class="tagline">';
+        $_form .= '<div class="memberInfoHead mt-8">' . __('Address') . '</div>' . "\n";
+        $_form .= '</div>';
+
+        $_form .= '<table class="memberDetail table table-striped" cellpadding="5" cellspacing="0">' . "\n";
+        $_form .= '<tr>' . "\n";
+        $_form .= '<td class="key alterCell" width="20%"><strong>' . __('Address Line 1') . '</strong></td>';
+        $_form .= '<td class="value alterCell2"><input type="text" name="address_line" class="form-control" value="'.$fetch_query[8].'"  /></td>';
+        $_form .= '</tr>' . "\n";
+        $_form .= '<tr>' . "\n";
+        $_form .= '<td class="key alterCell" width="20%"><strong>' . __('Suburb/Town') . '</strong></td>';
+        $_form .= '<td class="value alterCell2"><input type="text" name="address_suburb" class="form-control" value="'.$fetch_query[9].'"  /></td>';
+        $_form .= '</tr>' . "\n";
+        $_form .= '<tr>' . "\n";
+        $_form .= '<td class="key alterCell" width="20%"><strong>' . __('State') . '</strong></td>';
+        $_form .= '<td class="value alterCell2"><input type="text" name="address_state" class="form-control" value="'.$fetch_query[10].'" /></td>';
+        $_form .= '</tr>' . "\n";
+        $_form .= '<tr>' . "\n";
+        $_form .= '<td class="key alterCell" width="20%"><strong>' . __('PostalCode') . '</strong></td>';
+        $_form .= '<td class="value alterCell2"><input type="text" name="address_postal" class="form-control" value="'.$fetch_query[11].'" /></td>';
+        $_form .= '</tr>' . "\n";
+        $_form .= '</table>' . "\n";
+
+        $_form .= '<div class="tagline">';
+        $_form .= '<div class="memberInfoHead mt-8">' . __('Change Password') . '</div>' . "\n";
+        $_form .= '</div>';
+
+        // show the change password
         $_form .= '<table class="memberDetail table table-striped" cellpadding="5" cellspacing="0">' . "\n";
         $_form .= '<tr>' . "\n";
         $_form .= '<td class="key alterCell" width="20%"><strong>' . __('Current Password') . '</strong></td>';
@@ -312,7 +490,7 @@ if ($is_member_login) :
         $_form .= '<td class="value alterCell2"><input type="password" name="newPass2" class="form-control" /></td>';
         $_form .= '</tr>' . "\n";
         $_form .= '<tr>' . "\n";
-        $_form .= '<td class="alterCell2" colspan="2" style="border:none;"><input class="btn btn-primary" type="submit" id="loginButton" name="changePass" value="' . __('Change Password') . '" /></td>';
+        $_form .= '<td class="alterCell2" colspan="2" style="border:none;"><input class="btn btn-primary" type="submit" id="loginButton" name="changePass" value="' . __('Update Information') . '" /></td>';
         $_form .= '</tr>' . "\n";
         $_form .= '</table>' . "\n";
         $_form .= '</form>' . "\n";
@@ -328,6 +506,26 @@ if ($is_member_login) :
        * @param       string      $str_conf_new_pass = member's new password request confirmation
        * @return      boolean     true on success, false on failed
        */
+
+    function procUpdateInformation($phone_number, $email, $address_line, $address_suburb, $address_state, $address_postal)
+    {
+        global $dbs;
+
+        $_sql_update = sprintf('UPDATE member SET member_phone=\'%s\', member_email=\'%s\', member_address_line=\'%s\', member_address_suburb=\'%s\', member_address_state=\'%s\', member_address_postal=\'%s\'
+            WHERE member_id=\'%s\'', $dbs->escape_string($phone_number), $dbs->escape_string($email), $dbs->escape_string($address_line), $dbs->escape_string($address_suburb), $dbs->escape_string($address_state), $dbs->escape_string($address_postal), $dbs->escape_string(trim($_SESSION['mid'])));
+        @$dbs->query($_sql_update);
+        if (!$dbs->error) {
+            $_SESSION['m_address'] = $_POST['address_line'].' '.$_POST['address_suburb'].' '.$_POST['address_state'].' '.$_POST['address_postal'];
+            $_SESSION['m_member_phone'] = $_POST['phone_number'];
+            $_SESSION['m_email'] = $email;
+
+            return true;
+        } else {
+            return SOMETHING_WENT_WRONG;
+        }
+    }
+
+
     function procChangePassword($str_curr_pass, $str_new_pass, $str_conf_new_pass)
     {
         global $dbs;
@@ -549,11 +747,11 @@ if ($is_member_login) :
             $_criteria = "b.biblio_id IN ($_ids)";
         }
         $_loan_list->setSQLCriteria($_criteria);
-		$_loan_list->invisible_fields = [1];
-		$_loan_list->modifyColumnContent(2, 'callback{showMarkDetail1}');
-		$_loan_list->modifyColumnContent(0, 'callback{showBookCover}');
-        //$_loan_list->modifyColumnContent(0, '<input type="checkbox" name="basket[]" class="basketItem" value="{column_value}" />');
-		
+        //$_loan_list->invisible_fields = [1];
+        $_loan_list->modifyColumnContent(2, 'callback{showMarkDetail1}');
+        $_loan_list->modifyColumnContent(0, 'callback{showBookCover}');
+        $_loan_list->modifyColumnContent(1, '<input type="checkbox" name="basket[]" class="basketItem" value="{column_value}" />');
+
     function showMarkDetail1($obj_db, $data)
     {
         return '<button class="btn btn-danger btn-sm deleteBookmark" data-id="' . $data[2] . '"><i class="fa fa-trash"></i></button>';
@@ -587,7 +785,6 @@ if ($is_member_login) :
         if (count($_SESSION['m_mark_biblio']) === 0) return ['status' => 'ERROR', 'message' => 'No Titles to reserve'];
         
         $mail = \SLiMS\Mail::to(config('mail.from'), config('mail.from_name'));
-
         try {
             // additional recipient
             if (is_array(config('mail.add_recipients'))) {
@@ -659,7 +856,7 @@ if ($is_member_login) :
                     } else {
                         $reserve['biblio_id'] = $id;
                         $reserve['item_code'] = $item_code;
-                        $reserve['reserve_date'] = date('d m Y H:i:s');
+                        $reserve['reserve_date'] = date('Y-m-d H:i:s');
                         if($sql_op->insert('reserve', $reserve)) {
                             $result[] = ['status' => 'SUCCESS', 'message' => sprintf(__('%s reserved successfully.'), $biblio['title'])];
                             unset($_SESSION['m_mark_biblio'][$_index]);
@@ -720,18 +917,30 @@ if ($is_member_login) :
         return $query->num_rows > 0;
     }
 
-    // if there is change password request
-    if (isset($_POST['changePass']) && $sysconf['auth']['member']['method'] == 'native') {
-        $change_pass = procChangePassword($_POST['currPass'], $_POST['newPass'], $_POST['newPass2']);
-        if ($change_pass === true) {
-            $info = '<span style="font-size: 120%; font-weight: bold; color: #28a745;">' . __('Your password has been changed successfully.') . '</span>';
-        } else {
-            if ($change_pass === CURR_PASSWD_WRONG) {
-                $info = __('Please insert the correct current password.');
-            } else if ($change_pass === PASSWD_NOT_MATCH) {
-                $info = __('Password confirmation failed. Please try again.');
+    if(isset($_POST['email'])) {
+        $update_information = procUpdateInformation($_POST['phone_number'], $_POST['email'], $_POST['address_line'], $_POST['address_suburb'], $_POST['address_state'], $_POST['address_postal']);
+        if ($update_information == true) {
+            // if there is change password request
+            if (isset($_POST['changePass']) && $sysconf['auth']['member']['method'] == 'native' && !empty($_POST['currPass'])) {
+                $change_pass = procChangePassword($_POST['currPass'], $_POST['newPass'], $_POST['newPass2']);
+                if ($change_pass === true) {
+                    $info = '<span style="font-size: 120%; font-weight: bold; color: #28a745;">' . __('Your password and information has been changed successfully.') . '</span>';
+                } else {
+                    if ($change_pass === CURR_PASSWD_WRONG) {
+                        $info = __('Your information is update but not password, Please insert the correct current password.');
+                    } else if ($change_pass === PASSWD_NOT_MATCH) {
+                        $info = __('Your information is update but not password, Password confirmation failed. Please try again.');
+                    } else {
+                        $info = __('Your information is update but not password, Password update failed due to database error. Please contact the librarian for help.');
+                    }
+                    $info = '<span style="font-size: 120%; font-weight: bold; color: red;">' . $info . '</span>';
+                }
             } else {
-                $info = __('Password update failed due to database error. Please contact the librarian for help.');
+                $info = '<span style="font-size: 120%; font-weight: bold; color: #28a745;">' . __('Your information has been changed successfully.') . '</span>';
+            }
+        } else {
+            if ($change_pass === SOMETHING_WENT_WRONG) {
+                $info = __('Something went wrong');
             }
             $info = '<span style="font-size: 120%; font-weight: bold; color: red;">' . $info . '</span>';
         }
@@ -841,7 +1050,7 @@ if ($is_member_login) :
                             // change password only form NATIVE authentication, not for others such as LDAP
                             if ($sysconf['auth']['member']['method'] == 'native') {
                                 echo '<div class="tagline">';
-                                echo '<div class="memberInfoHead mt-8">' . __('Change Password') . '</div>' . "\n";
+                                echo '<div class="memberInfoHead mt-8">' . __('Information') . '</div>' . "\n";
                                 echo '</div>';
                                 echo changePassword();
                             }
@@ -996,7 +1205,7 @@ if ($is_member_login) :
 					</div>
 
 					<div class="flex-sb-m w-full p-t-3 p-b-8">
-						<a href="#" class="txt1">
+						<a href="index.php?p=forgot" class="txt1">
 							Forgot Password?
 						</a>
 					</div>

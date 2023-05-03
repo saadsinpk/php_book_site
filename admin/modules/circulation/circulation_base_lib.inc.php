@@ -440,6 +440,8 @@ class circulation extends member
             if (isset($_SESSION['receipt_record']['return']) || isset($_SESSION['receipt_record']['extend']) || isset($_SESSION['temp_loan'])) {
                 $_SESSION['receipt_record']['memberID'] = $this->member_id;
                 $_SESSION['receipt_record']['memberName'] = $this->member_name;
+                $_SESSION['receipt_record']['firstName'] = $this->first_name;
+                $_SESSION['receipt_record']['lastName'] = $this->last_name;
                 $_SESSION['receipt_record']['memberType'] = $this->member_type_name;
                 $_SESSION['receipt_record']['date'] = date('Y-m-d H:i:s');
             } else {

@@ -124,7 +124,7 @@ class overdueMail extends TemplateContract
         </div>
         HTML;
 
-        $this->contents = str_ireplace(['<!--MEMBER_ID-->', '<!--MEMBER_NAME-->','<!--DATE-->'], [$this->member->member_id, $this->member->member_name, date('Y-m-d H:i:s')], $formatedTemplate);
+        $this->contents = str_ireplace(['<!--MEMBER_ID-->', '<!--MEMBER_NAME-->', '<!--FIRST_NAME-->', '<!--LAST_NAME-->','<!--DATE-->'], [$this->member->member_id, $this->member->member_name, $this->member->first_name, $this->member->last_name, date('Y-m-d H:i:s')], $formatedTemplate);
 
         return $this;
     }
